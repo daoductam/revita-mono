@@ -1,8 +1,11 @@
 package com.tamdao.spring_revita_be.common.error;
 
+import com.tamdao.spring_revita_be.common.api.ApiResponseFactory;
+import com.tamdao.spring_revita_be.common.api.ApiVersionResolver;
 import com.tamdao.spring_revita_be.common.web.RequestIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -18,12 +21,16 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private final ApiResponseFactory responseFactory;
+    private final ApiVersionResolver apiVersionResolver;
+
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiErrorResponse> handleBusinessException(
+    public ResponseEntity<?> handleBusinessException(
             BusinessException exception,
             HttpServletRequest request) {
         return response(
@@ -34,7 +41,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleMethodArgumentNotValid(
+    public ResponseEntity<?> handleMethodArgumentNotValid(
             MethodArgumentNotValidException exception,
             HttpServletRequest request) {
         List<ApiErrorResponse.ErrorDetail> details = exception.getBindingResult()
@@ -49,7 +56,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ApiErrorResponse> handleConstraintViolation(
+    public ResponseEntity<?> handleConstraintViolation(
             ConstraintViolationException exception,
             HttpServletRequest request) {
         List<ApiErrorResponse.ErrorDetail> details = exception.getConstraintViolations()
@@ -63,28 +70,28 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiErrorResponse> handleUnreadableMessage(
+    public ResponseEntity<?> handleUnreadableMessage(
             HttpMessageNotReadableException exception,
             HttpServletRequest request) {
         return response(ErrorCode.INVALID_REQUEST, null, List.of(), request);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleNotFound(
+    public ResponseEntity<?> handleNotFound(
             NoResourceFoundException exception,
             HttpServletRequest request) {
         return response(ErrorCode.NOT_FOUND, null, List.of(), request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiErrorResponse> handleAccessDenied(
+    public ResponseEntity<?> handleAccessDenied(
             AccessDeniedException exception,
             HttpServletRequest request) {
         return response(ErrorCode.FORBIDDEN, null, List.of(), request);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<ApiErrorResponse> handleResponseStatus(
+    public ResponseEntity<?> handleResponseStatus(
             ResponseStatusException exception,
             HttpServletRequest request) {
         HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
@@ -97,7 +104,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(
+    public ResponseEntity<?> handleUnexpected(
             Exception exception,
             HttpServletRequest request) {
         String requestId = requestId(request);
@@ -105,7 +112,7 @@ public class GlobalExceptionHandler {
         return response(ErrorCode.INTERNAL_ERROR, null, List.of(), request);
     }
 
-    private ResponseEntity<ApiErrorResponse> response(
+    private ResponseEntity<?> response(
             ErrorCode errorCode,
             String message,
             List<ApiErrorResponse.ErrorDetail> details,
@@ -113,12 +120,16 @@ public class GlobalExceptionHandler {
         return response(errorCode.httpStatus(), errorCode, message, details, request);
     }
 
-    private ResponseEntity<ApiErrorResponse> response(
+    private ResponseEntity<?> response(
             HttpStatus status,
             ErrorCode errorCode,
             String message,
             List<ApiErrorResponse.ErrorDetail> details,
             HttpServletRequest request) {
+        if (apiVersionResolver.isV1(request)) {
+            return ResponseEntity.status(status)
+                    .body(responseFactory.failure(errorCode, message, details, request));
+        }
         return ResponseEntity.status(status)
                 .body(ApiErrorResponse.of(errorCode, message, details, requestId(request)));
     }

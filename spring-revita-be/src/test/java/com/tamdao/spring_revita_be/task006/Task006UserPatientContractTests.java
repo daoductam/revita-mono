@@ -29,19 +29,20 @@ class Task006UserPatientContractTests extends Task006IntegrationTestSupport {
 
         mockMvc.perform(get("/api/v1/users/doctors").param("specialty", "dermat"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(STAFF_AUTH_ID))
-                .andExpect(jsonPath("$[0].doctorCode").value("DR-001"))
-                .andExpect(jsonPath("$[0].rating").value(4.8))
-                .andExpect(jsonPath("$[0].password").doesNotExist())
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(STAFF_AUTH_ID))
+                .andExpect(jsonPath("$.data[0].doctorCode").value("DR-001"))
+                .andExpect(jsonPath("$.data[0].rating").value(4.8))
+                .andExpect(jsonPath("$.data[0].password").doesNotExist());
 
-        mockMvc.perform(get("/api/users/doctors").param("specialty", "unknown"))
+        mockMvc.perform(get("/api/v1/users/doctors").param("specialty", "unknown"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
-    void userMeUpdatesJwtSubjectOnlyAndReturnsRawUserResponse() throws Exception {
+    void userMeUpdatesJwtSubjectOnlyAndReturnsV1UserEnvelope() throws Exception {
         AuthEntity patient = seedPatientA();
         PatientEntity patientEntity = patientRepository.findByAuthId(patient.getId()).orElseThrow();
 
@@ -53,11 +54,11 @@ class Task006UserPatientContractTests extends Task006IntegrationTestSupport {
                                 "address", "New Address",
                                 "gender", "female"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(PATIENT_A_AUTH_ID))
-                .andExpect(jsonPath("$.name").value("Updated Patient"))
-                .andExpect(jsonPath("$.address").value("New Address"))
-                .andExpect(jsonPath("$.data").doesNotExist())
-                .andExpect(jsonPath("$.password").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(PATIENT_A_AUTH_ID))
+                .andExpect(jsonPath("$.data.name").value("Updated Patient"))
+                .andExpect(jsonPath("$.data.address").value("New Address"))
+                .andExpect(jsonPath("$.data.password").doesNotExist());
 
         AuthEntity persisted = authRepository.findById(PATIENT_A_AUTH_ID).orElseThrow();
         org.junit.jupiter.api.Assertions.assertEquals("Updated Patient", persisted.getName());
@@ -70,7 +71,7 @@ class Task006UserPatientContractTests extends Task006IntegrationTestSupport {
         AuthEntity patientB = seedPatientB();
         PatientEntity patientEntityA = patientRepository.findByAuthId(patientA.getId()).orElseThrow();
 
-        mockMvc.perform(put("/api/users/me")
+        mockMvc.perform(put("/api/v1/users/me")
                         .with(jwtFor(patientA, patientEntityA))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("phone", "  " + patientB.getPhone() + "  "))))
@@ -90,14 +91,14 @@ class Task006UserPatientContractTests extends Task006IntegrationTestSupport {
         AuthEntity otherPatient = seedPatientB();
         PatientEntity patientEntity = patientRepository.findByAuthId(patient.getId()).orElseThrow();
 
-        mockMvc.perform(put("/api/patients/me")
+        mockMvc.perform(put("/api/v1/patients/me")
                         .with(jwtFor(patient, patientEntity))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "Patient Updated", "phone", "0900000990"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(PATIENT_A_ID))
-                .andExpect(jsonPath("$.patientCode").value("PAT-A"))
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(PATIENT_A_ID))
+                .andExpect(jsonPath("$.data.patientCode").value("PAT-A"));
 
         mockMvc.perform(put("/api/v1/patients/me")
                         .with(jwtFor(patient, patientEntity))

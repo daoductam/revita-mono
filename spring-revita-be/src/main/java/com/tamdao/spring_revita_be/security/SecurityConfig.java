@@ -1,5 +1,7 @@
 package com.tamdao.spring_revita_be.security;
 
+import com.tamdao.spring_revita_be.common.api.ApiResponseFactory;
+import com.tamdao.spring_revita_be.common.api.ApiVersionResolver;
 import com.tamdao.spring_revita_be.common.error.ApiErrorResponse;
 import com.tamdao.spring_revita_be.common.error.ErrorCode;
 import com.tamdao.spring_revita_be.common.web.RequestIdFilter;
@@ -110,15 +112,33 @@ public class SecurityConfig {
     }
 
     @Bean
-    AuthenticationEntryPoint authenticationEntryPoint(ObjectMapper objectMapper) {
+    AuthenticationEntryPoint authenticationEntryPoint(
+            ObjectMapper objectMapper,
+            ApiResponseFactory responseFactory,
+            ApiVersionResolver apiVersionResolver) {
         return (request, response, exception) -> writeSecurityError(
-                objectMapper, response, ErrorCode.UNAUTHORIZED, null, request);
+                objectMapper,
+                responseFactory,
+                apiVersionResolver,
+                response,
+                ErrorCode.UNAUTHORIZED,
+                null,
+                request);
     }
 
     @Bean
-    AccessDeniedHandler accessDeniedHandler(ObjectMapper objectMapper) {
+    AccessDeniedHandler accessDeniedHandler(
+            ObjectMapper objectMapper,
+            ApiResponseFactory responseFactory,
+            ApiVersionResolver apiVersionResolver) {
         return (request, response, exception) -> writeSecurityError(
-                objectMapper, response, ErrorCode.FORBIDDEN, null, request);
+                objectMapper,
+                responseFactory,
+                apiVersionResolver,
+                response,
+                ErrorCode.FORBIDDEN,
+                null,
+                request);
     }
 
     private static void addRoles(Collection<GrantedAuthority> authorities, Object rawRoles) {
@@ -140,16 +160,17 @@ public class SecurityConfig {
 
     private static void writeSecurityError(
             ObjectMapper objectMapper,
+            ApiResponseFactory responseFactory,
+            ApiVersionResolver apiVersionResolver,
             HttpServletResponse response,
             ErrorCode errorCode,
             String message,
             HttpServletRequest request) throws IOException {
         response.setStatus(errorCode.httpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getWriter(), ApiErrorResponse.of(
-                errorCode,
-                message,
-                List.of(),
-                RequestIdFilter.requestId(request)));
+        Object body = apiVersionResolver.isV1(request)
+                ? responseFactory.failure(errorCode, message, List.of(), request)
+                : ApiErrorResponse.of(errorCode, message, List.of(), RequestIdFilter.requestId(request));
+        objectMapper.writeValue(response.getWriter(), body);
     }
 }

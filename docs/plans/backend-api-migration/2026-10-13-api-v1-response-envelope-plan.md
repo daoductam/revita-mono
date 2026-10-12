@@ -3,7 +3,7 @@
 Spec Source: `docs/plans/backend-api-migration/2026-10-13-api-v1-response-envelope-spec.md`  
 Owner: `tamdao / Codex`  
 Last Updated: `2026-10-13`  
-Status: `Draft`
+Status: `Implemented`
 
 ---
 
@@ -11,21 +11,21 @@ Status: `Draft`
 
 **Problem:**
 
-TASK-006 currently returns raw DTOs for successful responses and `ApiErrorResponse` for errors. The canonical `/api/v1` contract needs one predictable JSON envelope while the legacy `/api` contract remains unchanged during frontend and desktop migration.
+TASK-006 currently returns raw DTOs for successful responses and `ApiErrorResponse` for errors. The canonical `/api/v1` contract needs one predictable JSON envelope, and `/api` is not exposed by the Spring backend.
 
 **Affected Modules:**
 
 - `spring-revita-be/common/api` — add the generic success/error envelope and response metadata.
-- `spring-revita-be/common/error` — serialize version-aware error envelopes.
+- `spring-revita-be/common/error` — serialize the canonical v1 error envelope.
 - `spring-revita-be/security` — serialize version-aware 401/403 responses.
-- `spring-revita-be/*/api` — expose thin `/api/v1` controllers returning `ResponseEntity<ApiResponse<T>>`.
-- `spring-revita-be/src/test` — assert v1 envelope and legacy raw compatibility.
+- `spring-revita-be/*/api` — expose feature controllers under `/api/v1` returning `ResponseEntity<ApiResponse<T>>`.
+- `spring-revita-be/src/test` — assert the canonical v1 envelope.
 - `docs/plans/backend-api-migration` — record contract and migration evidence.
 
 **Non-Goals:**
 
 - Do not change business services, entities, repositories, authorization policy or endpoint paths.
-- Do not wrap legacy `/api` success payloads.
+- Do not register or support legacy `/api` routes.
 - Do not change HTTP status semantics or WebSocket messages.
 - Do not introduce a second API version or external dependency.
 
@@ -39,8 +39,8 @@ TASK-006 currently returns raw DTOs for successful responses and `ApiErrorRespon
 **Rules:**
 
 - `/api/v1` controllers return `ResponseEntity<ApiResponse<T>>`.
-- `/api` controllers preserve their existing raw DTO/array and `ApiErrorResponse` shapes.
-- Both prefixes delegate to the same application services and security policy.
+- All `/api/v1` controllers return `ResponseEntity<ApiResponse<T>>`.
+- All feature controllers delegate to the same existing application services and security policy.
 - HTTP status is authoritative; body `error.code` is machine-readable business metadata only.
 - No password, token, OTP or provider secret may be serialized.
 - Do not modify unrelated modules or add external dependencies.
@@ -58,20 +58,20 @@ TASK-006 currently returns raw DTOs for successful responses and `ApiErrorRespon
 
 - Classes: `PascalCase`; methods/variables: `camelCase`; constants: `UPPER_SNAKE_CASE`.
 - Generic wrapper: `ApiResponse<T>`.
-- API v1 controllers use a clear `V1` suffix or `api.v1` package and delegate; no business logic duplication.
+- API controllers use normal feature names (`AuthController`, `RegistrationController`, `UserController`, `PatientController`, `PatientProfileController`) and delegate; no business logic duplication.
 - Use `ResponseEntity.status(...).body(...)` when status is not 200 and `ResponseEntity.ok(...)` otherwise.
 
 **Error Handling:**
 
 - `BusinessException`, `ErrorCode` and existing error details remain the source of error semantics.
-- `/api/v1` maps errors to `ApiResponse<Void>`; `/api` maps errors to `ApiErrorResponse`.
-- Security entry point and access-denied handler must apply the same path-aware rule.
+- `/api/v1` maps errors to `ApiResponse<Void>`.
+- Security entry point and access-denied handler must use the same canonical v1 envelope.
 
 **Testing:**
 
 - JUnit 5, Spring Boot Test, MockMvc and Spring Security Test.
-- Every changed endpoint is tested through both `/api/v1` and `/api`.
-- v1 assertions read payloads from `$.data`; legacy assertions keep reading the root.
+- Every changed endpoint is tested through `/api/v1`.
+- Assertions read feature payloads from `$.data`.
 - Run `cd spring-revita-be; .\mvnw.cmd -q test` before handoff.
 
 **Task Size:**
@@ -143,7 +143,7 @@ ApiMeta {
 
 - `POST /api/v1/register/complete` returns `ResponseEntity<ApiResponse<RegistrationCompleteResponse>>` with the existing `201` status.
 - List endpoints use `ApiResponse<List<T>>`, preserving raw array contents inside `data`.
-- Legacy `/api` endpoints keep their current response body and status.
+- No `/api` endpoint is registered.
 - Failure status comes from `ErrorCode.httpStatus()` or the existing mapped status, never from a body field.
 
 ---
@@ -155,10 +155,9 @@ ApiMeta {
 - `ApiResponse<T>` — immutable generic JSON envelope.
 - `ApiError`, `ApiErrorDetail`, `ApiMeta` — v1 envelope components.
 - `ApiResponseFactory` — one construction path for success/failure bodies.
-- `ApiVersionResolver` — identifies `/api/v1` without changing business logic.
-- `AuthV1Controller`, `RegistrationV1Controller`, `UserV1Controller`, `PatientV1Controller`, `PatientProfileV1Controller` — thin v1 adapters.
-- Existing legacy controllers — retain `/api` mappings and raw response types.
-- `GlobalExceptionHandler` and `SecurityConfig` — select v1 or legacy error serialization.
+- `ApiVersionResolver` — identifies `/api/v1` for filter-level error serialization.
+- `AuthController`, `RegistrationController`, `UserController`, `PatientController`, `PatientProfileController` — canonical v1 controllers.
+- `GlobalExceptionHandler` and `SecurityConfig` — serialize the canonical v1 error envelope for API requests.
 
 **Interaction Flow — v1 success:**
 
@@ -184,9 +183,9 @@ Client
 
 **Key Decisions:**
 
-- Use thin duplicate route adapters instead of `ResponseEntity<?>` path branching inside one controller. This preserves compile-time generic types and keeps the legacy adapter stable.
-- Reuse application services so business behavior cannot diverge between aliases.
-- Keep `ApiErrorResponse` for `/api` until clients migrate.
+- Use one controller per feature with explicit `ResponseEntity<ApiResponse<T>>` signatures. This keeps the contract visible to OpenAPI and client generators.
+- Reuse application services so business behavior remains separated from transport serialization.
+- Keep `ApiErrorResponse` only for non-API foundation/internal compatibility paths handled outside `/api/v1`.
 - Do not use a `ResponseBodyAdvice` as the primary mechanism because it hides the v1 contract from controller signatures and OpenAPI generation.
 
 ---
@@ -200,10 +199,10 @@ Client
 | `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/common/api/ApiMeta.java` | record | ENV-001 | v1 metadata contract |
 | `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/common/api/ApiResponseFactory.java` | component | ENV-001 | response construction |
 | `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/common/api/ApiVersionResolver.java` | component | ENV-001 | version detection |
-| `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/*/api/*V1Controller.java` | controllers | ENV-002/ENV-003 | v1 controller contract |
+| `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/*/api/*Controller.java` | controllers | ENV-002/ENV-003 | v1 controller contract |
 | `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/common/error/GlobalExceptionHandler.java` | modify | ENV-004 | version-aware MVC errors |
 | `spring-revita-be/src/main/java/com/tamdao/spring_revita_be/security/SecurityConfig.java` | modify | ENV-004 | version-aware security errors |
-| `spring-revita-be/src/test/java/com/tamdao/spring_revita_be/task006/*` | tests | ENV-005 | v1 and legacy contracts |
+| `spring-revita-be/src/test/java/com/tamdao/spring_revita_be/task006/*` | tests | ENV-005 | v1 contract |
 | `docs/plans/backend-api-migration/2026-10-13-api-v1-response-envelope-spec.md` | spec | ENV-000 | approved design |
 | `docs/plans/backend-api-migration/2026-10-13-api-v1-response-envelope-plan.md` | plan | ENV-000 | implementation plan |
 
@@ -253,19 +252,18 @@ Create the immutable v1 response types and a single factory/resolver used by con
 - `success(payload, requestId)` → `success=true`, `data=payload`, `error=null`.
 - `failure(error, requestId)` → `success=false`, `data=null`, populated error.
 - `/api/v1/auth/login` → `isV1=true`.
-- `/api/auth/login` → `isV1=false`.
+- `/api/auth/login` → `isV1=false` and is not a supported feature route.
 - No factory output contains credentials or tokens unless the supplied safe DTO already contains an allowed field.
 
 ## ENV-002: Auth, registration, user and patient v1 adapters
 
 **Description:**
 
-Expose thin v1 controllers for auth, registration, public doctors, user self-update and patient self-update. Remove `/api/v1` from the legacy controller mappings while retaining `/api` mappings.
+Expose the canonical controllers for auth, registration, public doctors, user self-update and patient self-update under `/api/v1`. Remove all legacy `/api` mappings.
 
 **Files:**
 
-- Modify existing `AuthController`, `RegistrationController`, `UserController` and `PatientController` legacy mappings.
-- Create corresponding v1 controllers or equivalent thin version adapters.
+- Modify `AuthController`, `RegistrationController`, `UserController` and `PatientController` to be the canonical v1 controllers.
 
 **Responsibilities:**
 
@@ -278,7 +276,7 @@ Expose thin v1 controllers for auth, registration, public doctors, user self-upd
 - v1 login → `200` and `$.data.accessToken`, `$.data.user`.
 - v1 registration complete → `201` and `$.data.userId`.
 - v1 doctor list → `200` and `$.data` is an array.
-- Legacy equivalents remain raw at the JSON root.
+- No legacy equivalent is exposed.
 
 ## ENV-003: Patient-profile v1 adapter
 
@@ -288,21 +286,20 @@ Expose v1 list, by-patient, by-id, create and update routes using the existing p
 
 **Files:**
 
-- Modify `PatientProfileController` legacy mapping.
-- Create the v1 patient-profile controller.
+- Modify `PatientProfileController` to be the canonical v1 controller.
 
 **Acceptance Criteria:**
 
 - v1 profile list → `$.data` is an array.
 - v1 create/update → payload fields are under `$.data`.
 - Patient A versus Patient B still returns the same 403 behavior.
-- Legacy profile responses remain unchanged.
+- No legacy profile route is exposed.
 
 ## ENV-004: Version-aware MVC and security errors
 
 **Description:**
 
-Update MVC exception handling and security response writers so v1 failures use `ApiResponse<Void>` while legacy failures preserve `ApiErrorResponse`.
+Update MVC exception handling and security response writers so `/api/v1` failures use `ApiResponse<Void>`.
 
 **Files:**
 
@@ -315,7 +312,7 @@ Update MVC exception handling and security response writers so v1 failures use `
 - v1 validation, conflict, not-found and unexpected errors → envelope with original status.
 - v1 anonymous protected request → `401` with `success=false` and `error.code=unauthorized`.
 - v1 forbidden request → `403` with `error.code=forbidden`.
-- Legacy error responses remain `{ "error": ... }`.
+- Non-API foundation tests may continue using the existing internal error shape; no `/api` feature route uses it.
 - No failure is returned with HTTP 200.
 
 ## ENV-005: Contract tests, OpenAPI and evidence
@@ -332,8 +329,8 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 
 **Acceptance Criteria:**
 
-- Every TASK-006 endpoint is asserted through both prefixes.
-- v1 success assertions use `$.data`; legacy assertions use root fields.
+- Every TASK-006 endpoint is asserted through `/api/v1`.
+- Success assertions use `$.data`; failure assertions use `$.error` and `$.meta.requestId`.
 - Auth, registration, ownership, validation, 401, 403, 404 and 409 are covered.
 - `cd spring-revita-be; .\mvnw.cmd -q test` passes.
 - No sensitive values appear in either response contract.
@@ -345,12 +342,12 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 | # | Scenario | Expected Behavior | Handled In |
 |---|---|---|---|
 | 1 | `/api/v1` success DTO | Wrapped in `ApiResponse<T>` without changing payload fields | ENV-002/003 |
-| 2 | `/api` success DTO | Remains raw and backward-compatible | ENV-002/003 |
+| 2 | `/api` request | No feature route is registered under the legacy prefix | ENV-002/003 |
 | 3 | v1 validation error | HTTP 400 with `success=false` and `error.code=validation_error` | ENV-004 |
 | 4 | v1 missing bearer | HTTP 401 with v1 envelope | ENV-004 |
 | 5 | v1 ownership denial | HTTP 403 with v1 envelope and no protected data | ENV-004/005 |
 | 6 | v1 not-found/conflict | HTTP 404/409 preserved with envelope | ENV-004 |
-| 7 | Error before MVC advice | Security writer selects v1 or legacy format from request path | ENV-004 |
+| 7 | Error before MVC advice | Security writer selects the canonical v1 envelope for `/api/v1` | ENV-004 |
 | 8 | Empty collection | `data=[]`, not `null`, on successful list response | ENV-001/005 |
 | 9 | Create response | Existing `201` status retained and payload is under `data` | ENV-002/005 |
 | 10 | Sensitive DTO fields | Password/token/OTP absent from `data` | ENV-005 |
@@ -361,11 +358,11 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 
 | # | Risk | Impact | Likelihood | Mitigation |
 |---|---|---|---|---|
-| 1 | Shared controllers cannot represent two static response types cleanly | High | High | Split into thin version adapters and keep services shared. |
+| 1 | Clients still depend on `/api` | High | High | Migrate client base URLs to `/api/v1` before deployment. |
 | 2 | Security filters bypass MVC exception advice | High | High | Add a shared path-aware security response writer and filter-level tests. |
-| 3 | Existing tests accidentally assert the wrong version shape | Medium | High | Make every alias test assert both envelope and raw root explicitly. |
+| 3 | Existing tests accidentally assert the old raw shape | Medium | High | Make every TASK-006 test assert the envelope explicitly. |
 | 4 | OpenAPI generic schemas are unclear to frontend generators | Medium | Medium | Add explicit examples and response schemas for representative DTOs. |
-| 5 | Frontend points at `/api/v1` before it is migrated | High | Medium | Coordinate rollout; keep `/api` as rollback and compatibility path. |
+| 5 | Frontend still reads fields at JSON root | High | Medium | Update web and desktop clients to read from `data` before rollout. |
 
 ---
 
@@ -374,13 +371,12 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 **Unit Tests:**
 
 - `ApiResponse` factory tests — success/failure invariants and null/empty details.
-- `ApiVersionResolver` tests — canonical, legacy and unrelated paths.
+- `ApiVersionResolver` tests — canonical v1, legacy and unrelated paths.
 
 **Integration Tests:**
 
 - Auth and registration v1 envelope tests.
 - Patient/user/profile v1 envelope tests.
-- Legacy alias raw compatibility tests.
 - MVC and security error envelope tests.
 - Existing persistence, ownership and exception suites.
 
@@ -388,13 +384,13 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 
 - Call v1 login, inspect `data.accessToken` and `data.user`.
 - Call v1 protected profile route with missing/invalid bearer, inspect `error.code` and HTTP status.
-- Call legacy `/api` equivalent and confirm root-level legacy shape.
+- Confirm `/api` is not registered and `/api/v1` is the only feature prefix.
 
 **Success Criteria:**
 
 - Full Maven test suite passes.
 - `/api/v1` has one success/error JSON family.
-- `/api` remains backward-compatible.
+- `/api` is intentionally unavailable; `/api/v1` is the only feature contract.
 - No service, authorization or persistence behavior changes.
 
 ---
@@ -403,14 +399,14 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 
 | Phase | Scope | Gate Criteria |
 |---|---|---|
-| 1 | Local tests | Envelope, alias and error tests pass. |
-| 2 | Staging | Updated web/desktop clients use `/api/v1`; legacy clients remain on `/api`. |
+| 1 | Local tests | Envelope, canonical route and error tests pass. |
+| 2 | Staging | Updated web/desktop clients use `/api/v1`. |
 | 3 | Controlled migration | No unexplained 4xx/5xx or JSON parsing errors. |
-| 4 | Deprecate legacy | Only after all clients move to v1 and a sunset date is approved. |
+| 4 | Stabilize v1 | Monitor client parsing and error rates after all clients move to v1. |
 
 **Rollback:**
 
-- Keep clients on `/api` and disable v1 routing if envelope parsing fails.
+- Roll back client deployment or revert the v1 transport change if envelope parsing fails.
 - Do not roll back business or persistence changes; this task is transport-only.
 
 ---
@@ -419,4 +415,4 @@ Update the TASK-006 contract suite and documentation to make the versioned respo
 
 - Add generated TypeScript/desktop clients from OpenAPI schemas.
 - Add `meta.pagination` for list endpoints when explicit pagination is introduced.
-- Deprecate `/api` only after frontend and desktop migration evidence is complete.
+- Generate clients from the single `/api/v1` OpenAPI contract after frontend and desktop migration evidence is complete.

@@ -16,61 +16,56 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class Task006AliasTests extends Task006IntegrationTestSupport {
 
     @Test
-    void authenticationAliasesHaveEquivalentRawSuccessSemantics() throws Exception {
+    void canonicalApiV1AuthenticationReturnsEnvelope() throws Exception {
         AuthEntity patient = seedPatientA();
         PatientEntity patientEntity = patientRepository.findByAuthId(patient.getId()).orElseThrow();
 
-        for (String prefix : new String[]{"/api/v1", "/api"}) {
-            mockMvc.perform(post(prefix + "/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(json(Map.of("identifier", patient.getEmail(), "password", "password123"))))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                    .andExpect(jsonPath("$.refreshToken").isNotEmpty())
-                    .andExpect(jsonPath("$.data").doesNotExist());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("identifier", patient.getEmail(), "password", "password123"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.user.id").value(PATIENT_A_AUTH_ID));
 
-            mockMvc.perform(get(prefix + "/auth/me").with(jwtFor(patient, patientEntity)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.id").value(PATIENT_A_AUTH_ID))
-                    .andExpect(jsonPath("$.data").doesNotExist());
-        }
+        mockMvc.perform(get("/api/v1/auth/me").with(jwtFor(patient, patientEntity)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(PATIENT_A_AUTH_ID));
     }
 
     @Test
-    void publicRegistrationAndDoctorAliasesAreBothReachable() throws Exception {
-        for (String prefix : new String[]{"/api/v1", "/api"}) {
-            mockMvc.perform(post(prefix + "/register/step1")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(json(Map.of("email", prefix.substring(1).replace('/', '-') + "@example.com"))))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.sessionId").isNotEmpty())
-                    .andExpect(jsonPath("$.message").isNotEmpty())
-                    .andExpect(jsonPath("$.data").doesNotExist());
+    void canonicalApiV1PublicRoutesReturnEnvelope() throws Exception {
+        mockMvc.perform(post("/api/v1/register/step1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("email", "canonical@example.com"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sessionId").isNotEmpty())
+                .andExpect(jsonPath("$.data.message").isNotEmpty());
 
-            mockMvc.perform(get(prefix + "/users/doctors"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$").isArray())
-                    .andExpect(jsonPath("$.data").doesNotExist());
-        }
+        mockMvc.perform(get("/api/v1/users/doctors"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test
-    void protectedUserPatientAndProfileAliasesUseSameAuthorizationAndFields() throws Exception {
+    void canonicalApiV1ProtectedRoutesReturnEnvelope() throws Exception {
         AuthEntity patient = seedPatientA();
         PatientEntity patientEntity = patientRepository.findByAuthId(patient.getId()).orElseThrow();
         PatientProfileEntity profile = seedProfile("profile-a", PATIENT_A_ID, "Profile A");
 
-        for (String prefix : new String[]{"/api/v1", "/api"}) {
-            mockMvc.perform(get(prefix + "/patient-profiles").with(jwtFor(patient, patientEntity)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].id").value(profile.getId()))
-                    .andExpect(jsonPath("$.data").doesNotExist());
+        mockMvc.perform(get("/api/v1/patient-profiles").with(jwtFor(patient, patientEntity)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(profile.getId()));
 
-            mockMvc.perform(get(prefix + "/patient-profiles/" + profile.getId())
-                            .with(jwtFor(patient, patientEntity)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.id").value(profile.getId()))
-                    .andExpect(jsonPath("$.data").doesNotExist());
-        }
+        mockMvc.perform(get("/api/v1/patient-profiles/" + profile.getId())
+                        .with(jwtFor(patient, patientEntity)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(profile.getId()));
     }
 }

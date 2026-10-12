@@ -1,11 +1,11 @@
 # API v1 Response Envelope Specification
 
 Date: 2026-10-13  
-Status: `Approved for planning`
+Status: `Implemented`
 
 ## 1. Objective
 
-Standardize the canonical `/api/v1` JSON contract without breaking existing web and desktop clients that still consume the legacy `/api` response shapes.
+Standardize the single canonical `/api/v1` JSON contract for the Spring backend. The backend does not expose a legacy `/api` route.
 
 The canonical controller contract is:
 
@@ -23,13 +23,13 @@ ResponseEntity<ApiResponse<T>>
 - All `/api/v1` business, validation, authentication and authorization errors.
 - Security entry-point and access-denied responses for `/api/v1`.
 - Controller tests, exception contract tests and OpenAPI-visible response types.
-- A compatibility boundary that preserves existing raw responses under `/api`.
+- A single transport boundary that returns the same envelope for every implemented `/api/v1` route.
 
 ### Out of scope
 
 - Reworking business services or persistence entities.
 - Changing endpoint paths, authentication rules, ownership rules or status-code semantics.
-- Migrating the legacy `/api` clients in this task.
+- Migrating web and desktop clients to the canonical `/api/v1` contract.
 - Introducing a second API version or changing WebSocket contracts.
 
 ## 3. Versioned response contract
@@ -105,7 +105,7 @@ Rules:
 
 ## 5. Routing and compatibility
 
-Controllers currently combine `/api/v1` and `/api` in one mapping. The implementation must introduce a version-aware response boundary without duplicating application logic.
+Only the canonical `/api/v1` route is exposed. Controllers use the normal feature names and delegate to the existing application services without duplicating business logic.
 
 Recommended shape:
 
@@ -113,20 +113,13 @@ Recommended shape:
 /api/v1/**
   Controller/application service -> ApiResponse<T>
   GlobalExceptionHandler/security handlers -> ApiResponse<Void>
-
-/api/**
-  Controller/application service -> existing raw DTO/array
-  GlobalExceptionHandler/security handlers -> existing ApiErrorResponse
 ```
 
-The route aliases must continue using the same authentication, authorization and application services. Only the transport response mapping differs by API version.
+There is no supported `/api` alias. Requests from clients must use `/api/v1`.
 
 ## 6. Error handling
 
-`GlobalExceptionHandler` must select the response format from the request path:
-
-- `/api/v1/**`: `ResponseEntity<ApiResponse<Void>>`.
-- `/api/**`: existing `ResponseEntity<ApiErrorResponse>`.
+`GlobalExceptionHandler` must return `ResponseEntity<ApiResponse<Void>>` for `/api/v1/**` failures.
 
 The same rule applies to:
 
@@ -143,9 +136,9 @@ No exception handler may return HTTP 200 for a failure.
 
 - Every TASK-006 `/api/v1` success route returns exactly one `ApiResponse` envelope.
 - Every TASK-006 `/api/v1` error route returns the same envelope family with the original HTTP status and error code.
-- The corresponding `/api` route keeps its current raw success and `ApiErrorResponse` error shape.
+- No `/api` compatibility route is registered.
 - Existing business, ownership and persistence behavior is unchanged.
-- Tests cover success, validation, 401, 403, 404 and 409 through both prefixes.
+- Tests cover success, validation, 401, 403, 404 and 409 through `/api/v1`.
 - Auth, registration, profile, patient and doctor response payloads remain the same inside `data`.
 - `.\mvnw.cmd -q test` passes after migration.
 
@@ -153,7 +146,7 @@ No exception handler may return HTTP 200 for a failure.
 
 | Risk | Mitigation |
 |---|---|
-| Existing controllers share both route prefixes | Add version-aware transport mapping or separate thin version controllers; keep services shared. |
+| Clients still call `/api` | Update web and desktop base URLs to `/api/v1` before rollout. |
 | Security filters write responses before MVC advice | Centralize version detection in the security response writer. |
-| Frontend reads fields at JSON root | Update only clients using `/api/v1`; keep `/api` raw during migration. |
+| Frontend reads fields at JSON root | Update clients to read feature payloads from `data`. |
 | OpenAPI exposes generic wrapper poorly | Add explicit schemas/examples for `ApiResponse` and endpoint payloads. |

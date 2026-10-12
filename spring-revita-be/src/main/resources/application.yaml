@@ -57,12 +57,5 @@ app:
       - /api/v1/register/resend-otp
       - /api/v1/register/complete
       - /api/v1/users/doctors
-      - /api/auth/login
-      - /api/auth/refresh
-      - /api/register/step1
-      - /api/register/verify-otp
-      - /api/register/resend-otp
-      - /api/register/complete
-      - /api/users/doctors
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}

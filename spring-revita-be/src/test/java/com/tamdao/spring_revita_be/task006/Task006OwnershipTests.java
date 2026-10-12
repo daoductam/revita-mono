@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class Task006OwnershipTests extends Task006IntegrationTestSupport {
 
     @Test
-    void patientCanReadOnlyOwnProfilesAcrossBothRoutePrefixes() throws Exception {
+    void patientCanReadOnlyOwnProfiles() throws Exception {
         AuthEntity patientA = seedPatientA();
         PatientEntity patientEntityA = patientRepository.findByAuthId(patientA.getId()).orElseThrow();
         seedPatientB();
@@ -27,20 +27,21 @@ class Task006OwnershipTests extends Task006IntegrationTestSupport {
 
         mockMvc.perform(get("/api/v1/patient-profiles").with(jwtFor(patientA, patientEntityA)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(profileA.getId()))
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(profileA.getId()));
 
-        mockMvc.perform(get("/api/patient-profiles/patient/" + PATIENT_A_ID)
+        mockMvc.perform(get("/api/v1/patient-profiles/patient/" + PATIENT_A_ID)
                         .with(jwtFor(patientA, patientEntityA)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].patientId").value(PATIENT_A_ID));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].patientId").value(PATIENT_A_ID));
 
         mockMvc.perform(get("/api/v1/patient-profiles/" + profileB.getId())
                         .with(jwtFor(patientA, patientEntityA)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("forbidden"));
 
-        mockMvc.perform(get("/api/patient-profiles/patient/" + PATIENT_B_ID)
+        mockMvc.perform(get("/api/v1/patient-profiles/patient/" + PATIENT_B_ID)
                         .with(jwtFor(patientA, patientEntityA)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("forbidden"));
@@ -57,21 +58,21 @@ class Task006OwnershipTests extends Task006IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(profileRequest(PATIENT_A_ID, "Created Profile")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.patientId").value(PATIENT_A_ID))
-                .andExpect(jsonPath("$.isPregnant").value(false))
-                .andExpect(jsonPath("$.isDisabled").value(false))
-                .andExpect(jsonPath("$.data").doesNotExist())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.patientId").value(PATIENT_A_ID))
+                .andExpect(jsonPath("$.data.isPregnant").value(false))
+                .andExpect(jsonPath("$.data.isDisabled").value(false))
                 .andReturn();
-        String profileId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+        String profileId = objectMapper.readTree(created.getResponse().getContentAsString()).get("data").get("id").asText();
 
-        mockMvc.perform(post("/api/patient-profiles")
+        mockMvc.perform(post("/api/v1/patient-profiles")
                         .with(jwtFor(patientA, patientEntityA))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(profileRequest(PATIENT_B_ID, "Wrong Owner")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("forbidden"));
 
-        mockMvc.perform(patch("/api/patient-profiles/" + profileId)
+        mockMvc.perform(patch("/api/v1/patient-profiles/" + profileId)
                         .with(jwtFor(patientA, patientEntityA))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -79,9 +80,10 @@ class Task006OwnershipTests extends Task006IntegrationTestSupport {
                                 "isPregnant", true,
                                 "emergencyContact", Map.of("name", "Updated Contact", "phone", "0900000022")))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Updated Profile"))
-                .andExpect(jsonPath("$.isPregnant").value(false))
-                .andExpect(jsonPath("$.emergencyContact.name").value("Updated Contact"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.name").value("Updated Profile"))
+                .andExpect(jsonPath("$.data.isPregnant").value(false))
+                .andExpect(jsonPath("$.data.emergencyContact.name").value("Updated Contact"));
 
         PatientProfileEntity otherProfile = seedProfile("profile-b", PATIENT_B_ID, "Other Profile");
         mockMvc.perform(patch("/api/v1/patient-profiles/" + otherProfile.getId())
@@ -100,18 +102,19 @@ class Task006OwnershipTests extends Task006IntegrationTestSupport {
 
         mockMvc.perform(get("/api/v1/patient-profiles").with(jwtFor(doctor, null)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(profileA.getId()));
+                .andExpect(jsonPath("$.data[0].id").value(profileA.getId()));
 
-        mockMvc.perform(patch("/api/patient-profiles/" + profileA.getId())
+        mockMvc.perform(patch("/api/v1/patient-profiles/" + profileA.getId())
                         .with(jwtFor(doctor, null))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("isPregnant", true, "isDisabled", true))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.isPregnant").value(true))
-                .andExpect(jsonPath("$.isDisabled").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.isPregnant").value(true))
+                .andExpect(jsonPath("$.data.isDisabled").value(true));
 
         AuthEntity cashier = seedStaff(Role.CASHIER);
-        mockMvc.perform(get("/api/patient-profiles/" + profileA.getId()).with(jwtFor(cashier, null)))
+        mockMvc.perform(get("/api/v1/patient-profiles/" + profileA.getId()).with(jwtFor(cashier, null)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("forbidden"));
     }
@@ -126,7 +129,7 @@ class Task006OwnershipTests extends Task006IntegrationTestSupport {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("not_found"));
 
-        mockMvc.perform(get("/api/patient-profiles"))
+        mockMvc.perform(get("/api/v1/patient-profiles"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("unauthorized"));
     }

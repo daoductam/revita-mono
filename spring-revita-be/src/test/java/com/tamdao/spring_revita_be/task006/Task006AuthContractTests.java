@@ -26,36 +26,36 @@ class Task006AuthContractTests extends Task006IntegrationTestSupport {
     private JwtTokenService jwtTokenService;
 
     @Test
-    void loginByEmailReturnsRawLegacyResponseWithoutSensitiveFields() throws Exception {
+    void loginByEmailReturnsV1EnvelopeWithoutSensitiveFields() throws Exception {
         seedPatientA();
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("identifier", "patient-a@example.com", "password", "password123"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
-                .andExpect(jsonPath("$.user.id").value(PATIENT_A_AUTH_ID))
-                .andExpect(jsonPath("$.user.patient.id").value(PATIENT_A_ID))
-                .andExpect(jsonPath("$.data").doesNotExist())
-                .andExpect(jsonPath("$.user.password").doesNotExist())
-                .andExpect(jsonPath("$.user.accessToken").doesNotExist())
-                .andExpect(jsonPath("$.user.refreshToken").doesNotExist())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.user.id").value(PATIENT_A_AUTH_ID))
+                .andExpect(jsonPath("$.data.user.patient.id").value(PATIENT_A_ID))
+                .andExpect(jsonPath("$.data.user.password").doesNotExist())
+                .andExpect(jsonPath("$.data.user.accessToken").doesNotExist())
+                .andExpect(jsonPath("$.data.user.refreshToken").doesNotExist())
                 .andExpect(header().exists("X-Request-ID"));
     }
 
     @Test
-    void loginByPhoneAndLegacyAliasPreservesContract() throws Exception {
+    void loginByPhonePreservesV1Contract() throws Exception {
         seedPatientA();
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("identifier", "0900000001", "password", "password123"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
-                .andExpect(jsonPath("$.user.role").value("PATIENT"))
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.user.role").value("PATIENT"));
     }
 
     @Test
@@ -68,11 +68,13 @@ class Task006AuthContractTests extends Task006IntegrationTestSupport {
                         .content(json(Map.of("identifier", "patient-a@example.com", "password", "wrong"))))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("unauthorized"))
-                .andExpect(jsonPath("$.error.requestId").value("auth-invalid"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data").doesNotExist())
+                .andExpect(jsonPath("$.meta.requestId").value("auth-invalid"));
     }
 
     @Test
-    void refreshReturnsRawTokenResponseAndRejectsAccessToken() throws Exception {
+    void refreshReturnsV1EnvelopeAndRejectsLegacyAccessToken() throws Exception {
         AuthEntity patient = seedPatientA();
         PatientEntity patientEntity = patientRepository.findByAuthId(patient.getId()).orElseThrow();
         String accessToken = jwtTokenService.issueAccessToken(new AuthTokenSubject(
@@ -86,11 +88,11 @@ class Task006AuthContractTests extends Task006IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("refreshToken", refreshToken))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty());
 
-        mockMvc.perform(post("/api/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("refreshToken", accessToken))))
                 .andExpect(status().isUnauthorized())
@@ -108,15 +110,14 @@ class Task006AuthContractTests extends Task006IntegrationTestSupport {
 
         mockMvc.perform(get("/api/v1/auth/me").with(jwtFor(patient, patientEntity)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(PATIENT_A_AUTH_ID))
-                .andExpect(jsonPath("$.patient.id").value(PATIENT_A_ID))
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(PATIENT_A_AUTH_ID))
+                .andExpect(jsonPath("$.data.patient.id").value(PATIENT_A_ID));
 
-        mockMvc.perform(post("/api/auth/logout").with(jwtFor(patient, patientEntity)))
+        mockMvc.perform(post("/api/v1/auth/logout").with(jwtFor(patient, patientEntity)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.data.message").isNotEmpty());
 
         AuthEntity persisted = authRepository.findById(PATIENT_A_AUTH_ID).orElseThrow();
         org.junit.jupiter.api.Assertions.assertNull(persisted.getAccessToken());
@@ -126,15 +127,16 @@ class Task006AuthContractTests extends Task006IntegrationTestSupport {
 
     @Test
     void protectedAuthRouteWithoutBearerReturnsSharedUnauthorizedContract() throws Exception {
-        mockMvc.perform(get("/api/auth/me"))
+        mockMvc.perform(get("/api/v1/auth/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("unauthorized"))
-                .andExpect(jsonPath("$.error.requestId").isNotEmpty())
-                .andExpect(jsonPath("$.accessToken").doesNotExist());
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.meta.requestId").isNotEmpty());
 
         mockMvc.perform(post("/api/v1/auth/logout"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("unauthorized"));
+                .andExpect(jsonPath("$.error.code").value("unauthorized"))
+                .andExpect(jsonPath("$.meta.requestId").isNotEmpty());
     }
 
     @Test

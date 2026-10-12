@@ -62,15 +62,10 @@ class SpringRevitaBeApplicationTests {
 		mockMvc.perform(get("/api/v1/not-implemented"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.error.code").value("unauthorized"))
-				.andExpect(jsonPath("$.error.requestId").isNotEmpty())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.data").doesNotExist())
+				.andExpect(jsonPath("$.meta.requestId").isNotEmpty())
 				.andExpect(header().exists("X-Request-ID"));
-	}
-
-	@Test
-	void legacyBusinessPathAlsoRequiresBearerTokenDuringMigration() throws Exception {
-		mockMvc.perform(get("/api/not-implemented"))
-				.andExpect(status().isUnauthorized())
-				.andExpect(jsonPath("$.error.code").value("unauthorized"));
 	}
 
 	@Test

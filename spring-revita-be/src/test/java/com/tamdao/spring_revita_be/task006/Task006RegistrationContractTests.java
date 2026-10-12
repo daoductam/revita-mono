@@ -34,13 +34,13 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
         String sessionId = startRegistration("/api/v1/register/step1", "new@example.com", "0900000100");
         String otp = testOtpSender.getLastOtp();
 
-        mockMvc.perform(post("/api/register/verify-otp")
+        mockMvc.perform(post("/api/v1/register/verify-otp")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("sessionId", sessionId, "otp", otp))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sessionId").value(sessionId))
-                .andExpect(jsonPath("$.message").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sessionId").value(sessionId))
+                .andExpect(jsonPath("$.data.message").isNotEmpty());
 
         mockMvc.perform(post("/api/v1/register/complete")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -53,9 +53,9 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
                                 "password", "password123",
                                 "citizenId", "CITIZEN-100"))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.message").isNotEmpty())
-                .andExpect(jsonPath("$.userId").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.message").isNotEmpty())
+                .andExpect(jsonPath("$.data.userId").isNotEmpty());
 
         AuthEntity auth = authRepository.findFirstByPhoneOrEmail("0900000100", "new@example.com").orElseThrow();
         assertEquals(Role.PATIENT, auth.getRole());
@@ -74,7 +74,7 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
                 .andExpect(jsonPath("$.error.code").value("validation_error"));
 
         seedPatientA();
-        mockMvc.perform(post("/api/register/step1")
+        mockMvc.perform(post("/api/v1/register/step1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("email", "patient-a@example.com"))))
                 .andExpect(status().isConflict())
@@ -83,7 +83,7 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
 
     @Test
     void registrationRejectsInvalidOtpAndDoesNotAdvanceSession() throws Exception {
-        String sessionId = startRegistration("/api/register/step1", "otp@example.com", "0900000101");
+        String sessionId = startRegistration("/api/v1/register/step1", "otp@example.com", "0900000101");
 
         mockMvc.perform(post("/api/v1/register/verify-otp")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -111,13 +111,13 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
                         .content(json(Map.of("sessionId", sessionId, "otp", otp))))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/register/resend-otp")
+        mockMvc.perform(post("/api/v1/register/resend-otp")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("sessionId", sessionId))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("bad_request"));
 
-        mockMvc.perform(post("/api/register/verify-otp")
+        mockMvc.perform(post("/api/v1/register/verify-otp")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("sessionId", sessionId, "otp", otp))))
                 .andExpect(status().isBadRequest())
@@ -129,12 +129,12 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
         String sessionId = startRegistration("/api/v1/register/step1", "resend@example.com", "0900000104");
         String firstOtp = testOtpSender.getLastOtp();
 
-        mockMvc.perform(post("/api/register/resend-otp")
+        mockMvc.perform(post("/api/v1/register/resend-otp")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("sessionId", sessionId))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.message").isNotEmpty());
 
         String resentOtp = testOtpSender.getLastOtp();
         org.junit.jupiter.api.Assertions.assertNotNull(resentOtp);
@@ -175,11 +175,12 @@ class Task006RegistrationContractTests extends Task006IntegrationTestSupport {
         var result = mockMvc.perform(post(route)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("email", email, "phone", phone))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sessionId").isNotEmpty())
-                .andExpect(jsonPath("$.message").isNotEmpty())
-                .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).get("sessionId").asText();
+                .andExpect(status().isOk());
+        result.andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sessionId").isNotEmpty())
+                .andExpect(jsonPath("$.data.message").isNotEmpty());
+        var response = objectMapper.readTree(result.andReturn().getResponse().getContentAsString());
+        return response.get("data").get("sessionId").asText();
     }
 
     private Map<String, Object> completeRequest(String sessionId) {
