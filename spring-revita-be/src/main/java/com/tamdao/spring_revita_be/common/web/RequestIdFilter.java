@@ -19,6 +19,8 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String REQUEST_ID_HEADER = "X-Request-ID";
     public static final String CORRELATION_ID_HEADER = "X-Correlation-ID";
+    public static final String REQUEST_ID_ATTRIBUTE = RequestIdFilter.class.getName() + ".requestId";
+    public static final String CORRELATION_ID_ATTRIBUTE = RequestIdFilter.class.getName() + ".correlationId";
     private static final int MAX_ID_LENGTH = 128;
 
     @Override
@@ -29,6 +31,8 @@ public class RequestIdFilter extends OncePerRequestFilter {
         String requestId = safeId(request.getHeader(REQUEST_ID_HEADER));
         String correlationId = safeId(request.getHeader(CORRELATION_ID_HEADER));
 
+        request.setAttribute(REQUEST_ID_ATTRIBUTE, requestId);
+        request.setAttribute(CORRELATION_ID_ATTRIBUTE, correlationId);
         response.setHeader(REQUEST_ID_HEADER, requestId);
         response.setHeader(CORRELATION_ID_HEADER, correlationId);
         MDC.put("requestId", requestId);
@@ -48,5 +52,10 @@ public class RequestIdFilter extends OncePerRequestFilter {
             return candidate;
         }
         return UUID.randomUUID().toString();
+    }
+
+    public static String requestId(HttpServletRequest request) {
+        Object requestAttribute = request.getAttribute(REQUEST_ID_ATTRIBUTE);
+        return requestAttribute instanceof String value ? value : request.getHeader(REQUEST_ID_HEADER);
     }
 }

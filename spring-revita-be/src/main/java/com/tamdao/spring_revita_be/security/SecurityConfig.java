@@ -1,6 +1,8 @@
 package com.tamdao.spring_revita_be.security;
 
 import com.tamdao.spring_revita_be.common.error.ApiErrorResponse;
+import com.tamdao.spring_revita_be.common.error.ErrorCode;
+import com.tamdao.spring_revita_be.common.web.RequestIdFilter;
 import com.tamdao.spring_revita_be.config.AppSecurityProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -14,9 +16,13 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -71,12 +77,24 @@ public class SecurityConfig {
                 properties.requireJwtSecret().getBytes(StandardCharsets.UTF_8),
                 "HmacSHA256");
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key).build();
-        if (properties.getJwtIssuer() == null || properties.getJwtIssuer().isBlank()) {
-            decoder.setJwtValidator(JwtValidators.createDefault());
-        } else {
-            decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.getJwtIssuer()));
-        }
+        // Legacy NestJS tokens do not carry an issuer claim. Signature and
+        // expiration remain mandatory, while issuer validation is deferred
+        // until the migration has completed and all tokens are Spring-issued.
+        decoder.setJwtValidator(JwtValidators.createDefault());
         return decoder;
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder(AppSecurityProperties properties) {
+        SecretKeySpec key = new SecretKeySpec(
+                properties.requireJwtSecret().getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256");
+        return NimbusJwtEncoder.withSecretKey(key).build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean
@@ -94,13 +112,13 @@ public class SecurityConfig {
     @Bean
     AuthenticationEntryPoint authenticationEntryPoint(ObjectMapper objectMapper) {
         return (request, response, exception) -> writeSecurityError(
-                objectMapper, response, HttpServletResponse.SC_UNAUTHORIZED, "unauthorized", "Authentication is required", request);
+                objectMapper, response, ErrorCode.UNAUTHORIZED, null, request);
     }
 
     @Bean
     AccessDeniedHandler accessDeniedHandler(ObjectMapper objectMapper) {
         return (request, response, exception) -> writeSecurityError(
-                objectMapper, response, HttpServletResponse.SC_FORBIDDEN, "forbidden", "You are not allowed to access this resource", request);
+                objectMapper, response, ErrorCode.FORBIDDEN, null, request);
     }
 
     private static void addRoles(Collection<GrantedAuthority> authorities, Object rawRoles) {
@@ -123,16 +141,15 @@ public class SecurityConfig {
     private static void writeSecurityError(
             ObjectMapper objectMapper,
             HttpServletResponse response,
-            int status,
-            String code,
+            ErrorCode errorCode,
             String message,
             HttpServletRequest request) throws IOException {
-        response.setStatus(status);
+        response.setStatus(errorCode.httpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(), ApiErrorResponse.of(
-                code,
+                errorCode,
                 message,
                 List.of(),
-                request.getHeader("X-Request-ID")));
+                RequestIdFilter.requestId(request)));
     }
 }

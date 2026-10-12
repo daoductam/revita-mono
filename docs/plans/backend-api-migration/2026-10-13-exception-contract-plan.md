@@ -3,7 +3,7 @@
 Spec Source: `docs/plans/backend-api-migration/2026-10-13-exception-contract-spec.md`
 Owner: `Codex`
 Last Updated: `2026-10-13`
-Status: `In Review`
+Status: `Complete — EH-001–EH-005 implemented and verified`
 
 ---
 
@@ -260,9 +260,9 @@ Create the shared enum containing stable API code, HTTP status and safe default 
 
 **Acceptance Criteria:**
 
-- [ ] Every foundation value returns the expected code/status/message.
-- [ ] All codes are lowercase `snake_case`.
-- [ ] No enum value exposes secrets or internal exception text.
+- [x] Every foundation value returns the expected code/status/message.
+- [x] All codes are lowercase `snake_case`.
+- [x] No enum value exposes secrets or internal exception text.
 
 ## EH-002: Implement `BusinessException` and response helpers
 
@@ -285,10 +285,10 @@ Add the expected business exception and extend `ApiErrorResponse` with ErrorCode
 
 **Acceptance Criteria:**
 
-- [ ] `new BusinessException(ErrorCode.NOT_FOUND)` uses the enum default message.
-- [ ] Null `ErrorCode` fails immediately.
-- [ ] Details are immutable and never null in the response.
-- [ ] Existing `ApiErrorResponse.of(String, ...)` callers remain compatible until migration is complete.
+- [x] `new BusinessException(ErrorCode.NOT_FOUND)` uses the enum default message.
+- [x] Null `ErrorCode` fails immediately.
+- [x] Details are immutable and never null in the response.
+- [x] Existing `ApiErrorResponse.of(String, ...)` callers remain compatible until migration is complete.
 
 ## EH-003: Migrate `GlobalExceptionHandler`
 
@@ -310,11 +310,11 @@ Replace string literals for standard errors with `ErrorCode` and add `BusinessEx
 
 **Acceptance Criteria:**
 
-- [ ] `BusinessException(CONFLICT)` → HTTP 409/code `conflict`.
-- [ ] Validation exception → HTTP 400/code `validation_error` with field details.
-- [ ] Unknown exception → HTTP 500/code `internal_error` with generic message.
-- [ ] `NoResourceFoundException` → HTTP 404/code `not_found`.
-- [ ] Every response preserves request ID.
+- [x] `BusinessException(CONFLICT)` → HTTP 409/code `conflict`.
+- [x] Validation exception → HTTP 400/code `validation_error` with field details.
+- [x] Unknown exception → HTTP 500/code `internal_error` with generic message.
+- [x] `NoResourceFoundException` → HTTP 404/code `not_found`.
+- [x] Every response preserves request ID.
 
 ## EH-004: Reuse codes in security responses
 
@@ -336,9 +336,9 @@ Make the JWT authentication entry point and access-denied handler use shared `Er
 
 **Acceptance Criteria:**
 
-- [ ] Missing token → HTTP 401/code `unauthorized`.
-- [ ] Denied authority → HTTP 403/code `forbidden`.
-- [ ] Response shape matches `ApiErrorResponse` exactly.
+- [x] Missing token → HTTP 401/code `unauthorized`.
+- [x] Denied authority → HTTP 403/code `forbidden`.
+- [x] Response shape matches `ApiErrorResponse` exactly.
 
 ## EH-005: Verify and review
 
@@ -360,10 +360,10 @@ Add focused tests for the new contract and run the existing foundation suite.
 
 **Acceptance Criteria:**
 
-- [ ] Default, override, details, cause and null-code business exception cases pass.
-- [ ] 400/401/403/404/409/500 mappings pass.
-- [ ] Internal exception message and stack trace are absent from HTTP response.
-- [ ] `mvn test` passes with zero failures and errors.
+- [x] Default, override, details, cause and null-code business exception cases pass.
+- [x] 400/401/403/404/409/500 mappings pass.
+- [x] Internal exception message and stack trace are absent from HTTP response.
+- [x] `mvn test` passes with zero failures and errors.
 
 ---
 

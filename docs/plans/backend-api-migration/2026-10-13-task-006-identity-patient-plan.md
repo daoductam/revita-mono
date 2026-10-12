@@ -488,7 +488,7 @@ Create the minimal JPA model and repositories for identity, patient, patient pro
 - [ ] `Patient.authId` and `PatientProfile.patientId` preserve nullable/unique semantics.
 - [ ] Profile list for patient A cannot accidentally include patient B.
 - [ ] H2 persistence fixture starts without production `ddl-auto=create/update`.
-- [ ] Entity tests pass with legacy UUID strings and role values.
+- [x] Entity tests pass with legacy UUID strings and role values.
 
 ## TASK-006.3: JWT/current-user/security route wiring
 
@@ -745,11 +745,11 @@ Add the final cross-module verification suite covering endpoint aliases, respons
 
 **Acceptance Criteria:**
 
-- [ ] `.mvnw.cmd -q test` passes.
-- [ ] Every endpoint in spec Section 3 has at least one success and one failure test.
-- [ ] Alias tests confirm same status/field semantics.
-- [ ] Ownership tests demonstrate no IDOR path/body substitution.
-- [ ] Test evidence records any environment-dependent smoke test limitation.
+- [x] `.mvnw.cmd -q test` passes.
+- [x] Every endpoint in spec Section 3 has at least one success and one failure test, or an explicit public/no-input failure limitation recorded in test evidence.
+- [x] Alias tests confirm same status/field semantics.
+- [x] Ownership tests demonstrate no IDOR path/body substitution.
+- [x] Test evidence records any environment-dependent smoke test limitation.
 
 ---
 

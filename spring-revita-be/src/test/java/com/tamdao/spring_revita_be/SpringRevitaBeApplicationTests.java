@@ -62,6 +62,7 @@ class SpringRevitaBeApplicationTests {
 		mockMvc.perform(get("/api/v1/not-implemented"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.error.code").value("unauthorized"))
+				.andExpect(jsonPath("$.error.requestId").isNotEmpty())
 				.andExpect(header().exists("X-Request-ID"));
 	}
 

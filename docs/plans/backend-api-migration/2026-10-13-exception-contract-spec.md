@@ -1,7 +1,7 @@
 # Exception Contract Specification
 
 Date: 2026-10-13
-Status: Approved for planning
+Status: Implemented and verified
 Scope: `spring-revita-be` foundation before TASK-006
 
 ## Purpose
