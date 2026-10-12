@@ -1,0 +1,10 @@
+pandas
+numpy==1.26.4
+scikit-learn==1.2.2
+jupyter
+pyarrow
+fastparquet
+fastapi
+uvicorn[standard]
+joblib==1.5.2
+deep-translator
